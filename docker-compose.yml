@@ -1,0 +1,7 @@
+version: '3'
+services:
+  novnc:
+    image: novnc/websockify
+    command: "80 10.1.1.1:5900"
+    ports:
+      - "5959:80"
