@@ -1,0 +1,128 @@
+module Spice;
+
+import spicy; # 导入 Spicy 标准库
+
+# 加密与票据参数
+const SPICE_MAX_PASSWORD_LENGTH = 60;  # 最大密码长度为 60
+const SPICE_TICKET_KEY_PAIR_LENGTH = 1024;  # 假设票据密钥对长度为 1024（即 1024 位）
+const SPICE_TICKET_PUBKEY_BYTES = 162;  # 公钥字节数计算：1024 位 / 8 + 34
+
+# 通信过程中可能使用的各种消息类型。
+type SpiceMessageType = enum {
+    SPICE_MSG_MIGRATE = 1,#表示迁移消息，用于在不同主机之间迁移会话
+    SPICE_MSG_MIGRATE_DATA, # 表示迁移数据消息，用于传输迁移过程中的数据
+    SPICE_MSG_SET_ACK,# 表示设置确认消息，用于确认设置操作的完成
+    SPICE_MSG_PING,#表示心跳消息，用于检测连接的存活状态
+    SPICE_MSG_WAIT_FOR_CHANNELS,# 表示等待通道消息，用于等待特定通道的建立
+    SPICE_MSG_DISCONNECTING,# 表示断开连接消息，用于通知对方即将断开连接   
+    SPICE_MSG_NOTIFY,# 表示通知消息，用于向对方发送通知
+    SPICE_MSG_LIST,#表示列表消息，用于请求或发送列表数据
+    SPICE_MSG_BASE_LAST = 100,#表示基础消息类型的结束，用于标记枚举的边界
+};
+
+# 通用能力
+type SpiceCommonCap = enum {
+    # 支持协议认证选择功能。该功能允许客户端和服务器在建立连接时协商使用的认证机制。
+    SPICE_COMMON_CAP_PROTOCOL_AUTH_SELECTION = 0,
+    # 支持Spice认证机制, Spice认证机制是一种基于密码的认证方式，用于验证客户端的身份。
+    SPICE_COMMON_CAP_AUTH_SPICE = 1,
+    # 支持SASL认证机制, SASL（Simple Authentication and Security Layer）是一种用于用户身份验证和安全通信的协议。
+    SPICE_COMMON_CAP_AUTH_SASL = 2,
+    # 支持迷你头功能。该功能允许客户端和服务器在消息头中使用迷你头，以减少消息头的大小。
+    SPICE_COMMON_CAP_MINI_HEADER = 3,
+};
+
+# Spice 会话状态
+public type  SpiceSessionState = enum{
+    SPICE_LINK_CLIENT = 0, # 客户端链路消息状态
+    SPICE_LINK_SERVER = 1, # 服务器链路消息状态
+    SPICE_TICKET_CLIENT = 2, # 客户端票据状态
+    SPICE_TICKET_SERVER = 3, # 服务器票据状态
+    SPICE_CLIENT_AUTH_SELECT = 4, # 客户端认证方法选择状态
+    SPICE_SASL_INIT_FROM_SERVER = 5, # 服务器发起的SASL初始化状态
+    SPICE_SASL_START_TO_SERVER = 6, # 客户端向服务器发起的SASL认证开始状态
+    SPICE_SASL_START_FROM_SERVER = 7, # 服务器发起的SASL认证开始状态
+    SPICE_SASL_START_FROM_SERVER_CONT = 8, # 服务器发起的SASL认证开始（续）状态
+    SPICE_SASL_STEP_TO_SERVER = 9, # 客户端向服务器发送的SASL认证步骤状态
+    SPICE_SASL_STEP_FROM_SERVER = 10, # 服务器发送的SASL认证步骤状态
+    SPICE_SASL_STEP_FROM_SERVER_CONT = 11, # 服务器发送的SASL认证步骤（续）状态
+    SPICE_SASL_DATA = 12, # SASL数据状态
+    SPICE_DATA = 13 # 数据状态
+};
+
+
+public type SpiceConversation = unit {
+    # 连接的唯一标识符
+    connection_id: uint32;
+    # 通道能力的数量
+    num_channel_caps: uint32;
+    # 目标端口号
+    destport: uint32;
+    # 客户端认证信息
+    client_auth: uint32;
+    # 服务器认证信息
+    server_auth: uint32;
+    # 已选择的认证方式
+    auth_selected: uint32;
+    # 下一个会话状态
+    next_state:  uint16 &convert=SpiceSessionState($$);
+    # 回放模式
+    playback_mode: uint16;
+    # 通道类型
+    channel_type: uint8;
+    # 通道标识符
+    channel_id: uint8;
+    # 客户端是否使用迷你头
+    client_mini_header: uint8;
+    # 服务器是否使用迷你头
+    server_mini_header: uint8;
+};
+
+# Spice 链路头
+type SpiceLinkHeader = unit {
+    magic: uint32;         # 魔数，用于标识协议
+    major_version: uint32; # 主版本号
+    minor_version: uint32; # 次版本号
+    size: uint32;          # 消息体大小
+};
+
+
+# 链路消息 C2S 消息
+type SpiceLinkMess = unit {
+    connection_id: uint32;        # 连接ID，用于标识不同的连接
+    channel_type: uint8;          # 通道类型，用于标识不同的通道类型
+    channel_id: uint8;            # 通道ID，用于标识不同的通道
+    num_common_caps: uint32;      # 通用能力数量，用于标识支持的通用能力数量
+    num_channel_caps: uint32;     # 通道能力数量，用于标识支持的通道能力数量
+    caps_offset: uint32;          # 能力偏移量，用于标识能力列表的偏移量
+};
+
+# Spice 链路回复 S2C 消息
+type SpiceLinkReply = unit {
+    error: uint32;                                    # 错误码，用于标识回复中的错误状态
+    pub_key: bytes &size=SPICE_TICKET_PUBKEY_BYTES;    # 公钥，用于加密和解密数据
+    num_common_caps: uint32;                           # 通用能力数量，用于标识支持的通用能力数量
+    num_channel_caps: uint32;                          # 通道能力数量，用于标识支持的通道能力数量
+    caps_offset: uint32;                               # 能力偏移量，用于标识能力列表的偏移量
+};
+
+
+public type ClientLink = unit {
+    header: SpiceLinkHeader;
+    message: SpiceLinkMess;
+};
+
+public type ServerLink = unit {
+    header: SpiceLinkHeader;
+    message: SpiceLinkReply;
+};
+
+# Spice 链路认证机制 C2S 消息
+type SpiceLinkAuthMechanism = unit{
+    auth_mechanism: uint32; # 认证机制，用于标识使用的认证机制
+};
+
+# 加密的票据数据 C2S 消息
+type SpiceLinkEncryptedTicket  = unit{
+    encrypted_data: bytes &size=128; # 存储加密后的票据数据的字节数组
+};
