@@ -1,0 +1,15 @@
+[submodule "spice-protocol"]
+    path = spice-protocol
+    url = https://gitlab.freedesktop.org/spice/spice-protocol.git
+
+[submodule "libspice"]
+    path = libspice
+    url = https://gitlab.freedesktop.org/spice/spice.git
+
+[submodule "spice-gtk"]
+    path = spice-gtk
+    url = https://gitlab.freedesktop.org/spice/spice-gtk.git
+
+[submodule "spice-html5"]
+    path = spice-html5
+    url = https://gitlab.freedesktop.org/spice/spice-html5.git
