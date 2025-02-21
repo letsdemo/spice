@@ -3,21 +3,62 @@ module Spice;
 import spicy; # 导入 Spicy 标准库
 
 # 加密与票据参数
-const SPICE_MAX_PASSWORD_LENGTH = 60;  # 最大密码长度为 60
+const SPICE_MAX_PASSWORD_LENGTH = 60;       # 最大密码长度为 60
 const SPICE_TICKET_KEY_PAIR_LENGTH = 1024;  # 假设票据密钥对长度为 1024（即 1024 位）
-const SPICE_TICKET_PUBKEY_BYTES = 162;  # 公钥字节数计算：1024 位 / 8 + 34
+const SPICE_TICKET_PUBKEY_BYTES = 162;      # 公钥字节数计算：1024 位 / 8 + 34
 
-# 通信过程中可能使用的各种消息类型。
+# 各通道通用的消息类型。
 type SpiceMessageType = enum {
-    SPICE_MSG_MIGRATE = 1,#表示迁移消息，用于在不同主机之间迁移会话
-    SPICE_MSG_MIGRATE_DATA, # 表示迁移数据消息，用于传输迁移过程中的数据
-    SPICE_MSG_SET_ACK,# 表示设置确认消息，用于确认设置操作的完成
-    SPICE_MSG_PING,#表示心跳消息，用于检测连接的存活状态
-    SPICE_MSG_WAIT_FOR_CHANNELS,# 表示等待通道消息，用于等待特定通道的建立
-    SPICE_MSG_DISCONNECTING,# 表示断开连接消息，用于通知对方即将断开连接   
-    SPICE_MSG_NOTIFY,# 表示通知消息，用于向对方发送通知
-    SPICE_MSG_LIST,#表示列表消息，用于请求或发送列表数据
-    SPICE_MSG_BASE_LAST = 100,#表示基础消息类型的结束，用于标记枚举的边界
+    SPICE_MSG_MIGRATE = 1,      # 迁移消息，用于在不同主机之间迁移会话
+    SPICE_MSG_MIGRATE_DATA,     # 迁移数据消息，用于传输迁移过程中的数据
+    SPICE_MSG_SET_ACK,          # 设置确认消息，用于确认设置操作的完成
+    SPICE_MSG_PING,             # 心跳消息，用于检测连接的存活状态
+    SPICE_MSG_WAIT_FOR_CHANNELS,# 等待通道消息，用于等待特定通道的建立
+    SPICE_MSG_DISCONNECTING,    # 断开连接消息，用于通知对方即将断开连接   
+    SPICE_MSG_NOTIFY,           # 通知消息，用于向对方发送通知
+    SPICE_MSG_LIST,             # 列表消息，用于请求或发送列表数据
+    SPICE_MSG_BASE_LAST = 100,  # 基础消息类型的结束，用于标记枚举的边界
+};
+
+
+public type SpiceChannelType = enum {
+    SPICE_CHANNEL_MAIN = 1,
+    SPICE_CHANNEL_DISPLAY,
+    SPICE_CHANNEL_INPUTS,
+    SPICE_CHANNEL_CURSOR,
+    SPICE_CHANNEL_PLAYBACK,
+    SPICE_CHANNEL_RECORD,
+    SPICE_CHANNEL_TUNNEL,
+    SPICE_CHANNEL_SMARTCARD,
+    SPICE_CHANNEL_USBREDIR,
+    SPICE_CHANNEL_PORT,
+    SPICE_CHANNEL_WEBDAV,
+
+    SPICE_END_CHANNEL
+};
+
+# 主通道消息类型
+type SpiceMsgTypeMain = enum {
+    SPICE_MSG_MAIN_MIGRATE_BEGIN = 101,
+    SPICE_MSG_MAIN_MIGRATE_CANCEL,
+    SPICE_MSG_MAIN_INIT,
+    SPICE_MSG_MAIN_CHANNELS_LIST,
+    SPICE_MSG_MAIN_MOUSE_MODE,
+    SPICE_MSG_MAIN_MULTI_MEDIA_TIME,
+    SPICE_MSG_MAIN_AGENT_CONNECTED,
+    SPICE_MSG_MAIN_AGENT_DISCONNECTED,
+    SPICE_MSG_MAIN_AGENT_DATA,
+    SPICE_MSG_MAIN_AGENT_TOKEN,
+    SPICE_MSG_MAIN_MIGRATE_SWITCH_HOST,
+    SPICE_MSG_MAIN_MIGRATE_END,
+    SPICE_MSG_MAIN_NAME,
+    SPICE_MSG_MAIN_UUID,
+    SPICE_MSG_MAIN_AGENT_CONNECTED_TOKENS,
+    SPICE_MSG_MAIN_MIGRATE_BEGIN_SEAMLESS,
+    SPICE_MSG_MAIN_MIGRATE_DST_SEAMLESS_ACK,
+    SPICE_MSG_MAIN_MIGRATE_DST_SEAMLESS_NACK,
+
+    SPICE_MSG_END_MAIN
 };
 
 # 通用能力
@@ -34,20 +75,20 @@ type SpiceCommonCap = enum {
 
 # Spice 会话状态
 public type  SpiceSessionState = enum{
-    SPICE_LINK_CLIENT = 0, # 客户端链路消息状态
-    SPICE_LINK_SERVER = 1, # 服务器链路消息状态
-    SPICE_TICKET_CLIENT = 2, # 客户端票据状态
-    SPICE_TICKET_SERVER = 3, # 服务器票据状态
-    SPICE_CLIENT_AUTH_SELECT = 4, # 客户端认证方法选择状态
-    SPICE_SASL_INIT_FROM_SERVER = 5, # 服务器发起的SASL初始化状态
-    SPICE_SASL_START_TO_SERVER = 6, # 客户端向服务器发起的SASL认证开始状态
-    SPICE_SASL_START_FROM_SERVER = 7, # 服务器发起的SASL认证开始状态
-    SPICE_SASL_START_FROM_SERVER_CONT = 8, # 服务器发起的SASL认证开始（续）状态
-    SPICE_SASL_STEP_TO_SERVER = 9, # 客户端向服务器发送的SASL认证步骤状态
-    SPICE_SASL_STEP_FROM_SERVER = 10, # 服务器发送的SASL认证步骤状态
-    SPICE_SASL_STEP_FROM_SERVER_CONT = 11, # 服务器发送的SASL认证步骤（续）状态
-    SPICE_SASL_DATA = 12, # SASL数据状态
-    SPICE_DATA = 13 # 数据状态
+    SPICE_LINK_CLIENT = 0,                  # 客户端链路消息状态
+    SPICE_LINK_SERVER = 1,                  # 服务器链路消息状态
+    SPICE_TICKET_CLIENT = 2,                # 客户端票据状态
+    SPICE_TICKET_SERVER = 3,                # 服务器票据状态
+    SPICE_CLIENT_AUTH_SELECT = 4,           # 客户端认证方法选择状态
+    SPICE_SASL_INIT_FROM_SERVER = 5,        # 服务器发起的SASL初始化状态
+    SPICE_SASL_START_TO_SERVER = 6,         # 客户端向服务器发起的SASL认证开始状态
+    SPICE_SASL_START_FROM_SERVER = 7,       # 服务器发起的SASL认证开始状态
+    SPICE_SASL_START_FROM_SERVER_CONT = 8,  # 服务器发起的SASL认证开始（续）状态
+    SPICE_SASL_STEP_TO_SERVER = 9,          # 客户端向服务器发送的SASL认证步骤状态
+    SPICE_SASL_STEP_FROM_SERVER = 10,       # 服务器发送的SASL认证步骤状态
+    SPICE_SASL_STEP_FROM_SERVER_CONT = 11,  # 服务器发送的SASL认证步骤（续）状态
+    SPICE_SASL_DATA = 12,                   # SASL数据状态
+    SPICE_DATA = 13                         # 数据状态
 };
 
 
@@ -95,7 +136,19 @@ type SpiceLinkMess = unit {
     num_common_caps: uint32;      # 通用能力数量，用于标识支持的通用能力数量
     num_channel_caps: uint32;     # 通道能力数量，用于标识支持的通道能力数量
     caps_offset: uint32;          # 能力偏移量，用于标识能力列表的偏移量
-};
+    common_caps: bitfield (32) {
+        auth_selection : 0;       # 认证选择
+        auth_spice: 1;            # Spice 认证
+        auth_sasl :2;             # SASL 认证
+        use_mini_header: 3;       # 使用迷你头
+    };
+    channel_caps : bitfield (32) {
+        semi_miragation: 0;       # 半迁移
+        vm_name : 1;              # 虚拟机名称
+        agent_token : 2;          # 代理令牌
+        miragation : 3;           # 迁移
+    }
+} &byte-order=spicy::ByteOrder::Little;
 
 # Spice 链路回复 S2C 消息
 type SpiceLinkReply = unit {
@@ -104,7 +157,19 @@ type SpiceLinkReply = unit {
     num_common_caps: uint32;                           # 通用能力数量，用于标识支持的通用能力数量
     num_channel_caps: uint32;                          # 通道能力数量，用于标识支持的通道能力数量
     caps_offset: uint32;                               # 能力偏移量，用于标识能力列表的偏移量
-};
+    common_caps: bitfield (32) {
+        auth_selection : 0;       # 认证选择
+        auth_spice: 1;            # Spice 认证
+        auth_sasl :2;             # SASL 认证
+        use_mini_header: 3;       # 使用迷你头
+    };
+    channel_caps : bitfield (32) {
+        semi_miragation: 0;       # 半迁移
+        vm_name : 1;              # 虚拟机名称
+        agent_token : 2;          # 代理令牌
+        miragation : 3;           # 迁移
+    }
+} &byte-order=spicy::ByteOrder::Little;
 
 
 public type ClientLink = unit {
@@ -126,3 +191,116 @@ type SpiceLinkAuthMechanism = unit{
 type SpiceLinkEncryptedTicket  = unit{
     encrypted_data: bytes &size=128; # 存储加密后的票据数据的字节数组
 };
+
+type SpiceLinkResult  = unit{
+    error: uint32 &byte-order=spicy::ByteOrder::Little;
+};
+
+type SpiceDataHeader   = unit{
+    serial : uint64; #数据的序列号
+    msg_type : uint16; # 数据的类型
+    msg_size : uint32; # 数据的大小
+    sub_list : uint32; #offset to SpiceSubMessageList[] # 子消息列表的偏移量
+};
+
+
+type SpiceSubMessage = unit {
+    msg_type : uint16;
+    msg_size : uint32;
+};
+
+type SpiceSubMessageList = unit {
+    size : uint16;
+    sub_messages: uint32[]; #offsets to SpicedSubMessage
+};
+
+
+# 迷你格式数据头。
+type SpiceMiniDataHeader = unit {
+    msg_type : uint16; # 数据的类型
+    msg_size : uint32; # 数据的大小
+};
+
+# 迷你格式数据。
+public type SpiceMiniData = unit {
+    header : SpiceMiniDataHeader;
+    switch ( self.header.msg_type ) {
+        104 -> agent_data: VDAgentMessage &size=self.header.msg_size; # 只解析代理数据
+        * -> :bytes &size=self.header.msg_size; # default: raw_data原始数据
+    };
+};
+
+# 虚拟桌面代理消息 [vd_agent.h]
+type VDAgentMessage = unit{
+    protocol_version : uint32; # 协议版本
+    msg_type : uint32 &convert=VD_AGENT_TYPE($$); # 消息类型
+    opaque : uint64; # 不透明数据
+    size : uint32; # 数据大小
+    switch (self.msg_type) {
+        VD_AGENT_TYPE::VD_AGENT_CLIPBOARD -> clipboard_data: VDAgentClipboard(self.size); # 剪贴板消息
+        VD_AGENT_TYPE::VD_AGENT_CLIPBOARD_GRAB -> clipboard_grab: VDAgentClipboardGrab(self.size); # 剪贴板监听消息
+        VD_AGENT_TYPE::VD_AGENT_CLIPBOARD_REQUEST -> clipboard_request: VDAgentClipboardRequest(self.size); # 剪贴板请求消息
+        VD_AGENT_TYPE::VD_AGENT_FILE_XFER_START -> file_xfer_start: VDAgentFileXferStartMessage(self.size); # 文件传输开始消息
+        VD_AGENT_TYPE::VD_AGENT_FILE_XFER_STATUS -> file_xfer_status: VDAgentFileXferStatusMessage(self.size); # 文件传输状态消息
+        VD_AGENT_TYPE::VD_AGENT_FILE_XFER_DATA -> file_xfer_data: VDAgentFileXferDataMessage(self.size); # 文件传输数据消息
+        * -> :bytes &size=self.size; # default: raw_data原始数据
+    };
+};
+
+type VD_AGENT_TYPE = enum {
+    VD_AGENT_MOUSE_STATE = 1,       #server -> agent: 鼠标状态信息
+    VD_AGENT_MONITORS_CONFIG,       # client -> agent|server: 监视器配置信息 
+    VD_AGENT_REPLY,                 # agent -> client 发送回复信息 VDAgentReply
+    VD_AGENT_CLIPBOARD,             # 设置剪贴板数据（双向） VDAgentClipboard
+    VD_AGENT_DISPLAY_CONFIG,        # client -> agent：显示配置信息 VDAgentDisplayConfig
+    VD_AGENT_ANNOUNCE_CAPABILITIES, # 代理宣布其能力 VDAgentAnnounceCapabilities
+    VD_AGENT_CLIPBOARD_GRAB,        # 请求监听剪贴板变化（双向） VDAgentClipboardGrab
+    VD_AGENT_CLIPBOARD_REQUEST,     # 请求剪贴板数据（双向） VDAgentClipboardRequest
+    VD_AGENT_CLIPBOARD_RELEASE,     # 释放剪贴板 VDAgentClipboardRelease
+    VD_AGENT_FILE_XFER_START,       # 文件传输开始 VDAgentFileXferStartMessage
+    VD_AGENT_FILE_XFER_STATUS,      # 文件传输状态 VDAgentFileXferStatusMessage
+    VD_AGENT_FILE_XFER_DATA,        # 文件传输数据  VDAgentFileXferDataMessage   
+    VD_AGENT_CLIENT_DISCONNECTED,   # 客户端断开连接
+    VD_AGENT_MAX_CLIPBOARD,         # 最大剪贴板 VDAgentMaxClipboard
+    VD_AGENT_AUDIO_VOLUME_SYNC,     # 音频音量同步 VDAgentAudioVolumeSync
+    VD_AGENT_GRAPHICS_DEVICE_INFO,  # 图形设备信息 VDAgentGraphicsDeviceInfo
+    VD_AGENT_END_MESSAGE,           # 消息结束标志  
+};
+
+# 剪贴板消息
+type VDAgentClipboard = unit(data_size:uint32){
+     cb_type : uint32;                  # 剪贴板的类型 
+     data : bytes &size=data_size-4;    # 剪贴板的数据
+};
+
+type VDAgentClipboardGrab = unit(data_size:uint32){
+    types : uint32[] &size=data_size; # 支持的剪贴板数据类型数组
+};
+
+type VDAgentClipboardRequest = unit(data_size:uint32){
+    cb_type : uint32; # 请求的剪贴板数据类型
+};
+
+# 文件消息
+type VDAgentFileXferStartMessage = unit(data_size:uint32){
+    id : uint32; # 文件传输的唯一标识符
+    data : bytes &size=data_size - 4; # 文件传输的数据
+};
+
+type VDAgentFileXferStatusMessage = unit(data_size:uint32){
+    id : uint32; # 文件传输的唯一标识符
+    rv : uint32; # 文件传输的结果
+    data : bytes &size=data_size - 8; # 状态数据; 
+};
+
+type VDAgentFileXferDataMessage = unit(data_size:uint32){
+    id : uint32; # 文件传输的唯一标识符
+    file_size : uint64; # 数据大小，以字节为单位
+    data : bytes &size=data_size - 12; # 文件内容
+};
+
+
+
+
+
+
